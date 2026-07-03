@@ -1944,7 +1944,7 @@ export function PdpEditor({
             referenceModelImageFileName: usesReferenceModel ? referenceModelImage?.fileName : undefined
           }
         })
-      }, { geminiApiKey, openAiApiKey });
+      }, { geminiApiKey, openAiApiKey, timeoutMs: GENERATION_API_TIMEOUT_MS });
 
       setIsGeneratingImage(false);
 
