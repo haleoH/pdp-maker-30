@@ -18,7 +18,8 @@ import type {
   PdpOutputMode,
   PdpSourceMaterial,
   PdpTranscribeStripsResponse,
-  ReferenceModelUsage
+  ReferenceModelUsage,
+  SectionBlueprint
 } from "@runacademy/shared";
 import type { PdpAppState, PdpDraftSummary, PdpEditorDraftState, PdpSourceMaterialDraft, PreparedImageDraft } from "./pdp-drafts";
 import { deletePdpDraft, getPdpDraft, listPdpDrafts, savePdpDraft } from "./pdp-drafts";
@@ -1394,11 +1395,11 @@ export function PdpMakerClient() {
       outputMode,
       sectionsToGenerate: sectionsToGenerate.length,
       totalSections: nextSections.length,
-      withReferenceModel: Boolean(modelImage)
+      withReferenceModel: Boolean(modelImage),
+      sequential: selectedProviderUsesCodex
     });
 
-    const generatedSections = await Promise.allSettled(
-      sectionsToGenerate.map(async ({ section, index }) => {
+    const generateSectionImage = async ({ section, index }: { section: SectionBlueprint; index: number }) => {
         const sectionImageDefaults = getPdpSectionImageDefaults(section, index, nextSections.length, modelImageUsage);
         const shouldUseReferenceModel = Boolean(
           modelImage &&
@@ -1452,8 +1453,20 @@ export function PdpMakerClient() {
             generatedImage: `data:${response.mimeType};base64,${response.imageBase64}`
           }
         };
-      })
-    );
+    };
+
+    const generatedSections: Array<PromiseSettledResult<Awaited<ReturnType<typeof generateSectionImage>>>> = [];
+    if (selectedProviderUsesCodex) {
+      for (const item of sectionsToGenerate) {
+        try {
+          generatedSections.push({ status: "fulfilled", value: await generateSectionImage(item) });
+        } catch (reason) {
+          generatedSections.push({ status: "rejected", reason });
+        }
+      }
+    } else {
+      generatedSections.push(...await Promise.allSettled(sectionsToGenerate.map(generateSectionImage)));
+    }
 
     const failureMessages: string[] = [];
 
@@ -2441,7 +2454,7 @@ export function PdpMakerClient() {
         <PdpEditor
           key={`${activeDraftId ?? "new"}-${editorSessionKey}`}
           aspectRatio={aspectRatio}
-          aiProvider={aiProvider}
+          aiProvider={processingProvider}
           outputMode={outputMode}
           geminiApiKey={effectiveGeminiApiKey}
           openAiApiKey={effectiveOpenAiApiKey}

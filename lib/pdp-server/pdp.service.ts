@@ -24,11 +24,11 @@ import type {
   PdpCustomerReviewInput,
   PdpCustomerReviewSource,
   PdpGuidePriorityMode,
+  PdpSectionVisualRole,
   PdpAnalyzeRequest,
   PdpErrorCode,
   PdpSourceMaterial,
   PdpSourceMode,
-  PdpSectionVisualRole,
   PdpExpandRequest,
   PdpExpandResponse,
   PdpTranscribeStripsRequest,
@@ -1174,7 +1174,7 @@ export class PdpService {
     });
     const prompt = [
       `Aspect ratio: ${request.aspectRatio}.`,
-      buildImagePrompt(section, request.desiredTone, {
+      buildCodexImagePrompt(section, request.desiredTone, {
         ...options,
         referenceModelImageBase64: normalizedReferenceModel?.base64,
         referenceModelImageMimeType: normalizedReferenceModel?.mimeType
@@ -3218,6 +3218,91 @@ function buildImagePrompt(
   }
 
   return enhancedPrompt;
+}
+
+function buildCodexImagePrompt(
+  section: SectionBlueprint,
+  desiredTone?: string,
+  options?: InternalImageGenOptions
+) {
+  const visualRole = inferPdpSectionVisualRole(section);
+  const onImageCopy = buildOnImageCopy(section, options);
+  const sceneDirection = compactPromptText(
+    [
+      section.purpose,
+      section.prompt_en || section.prompt_ko,
+      section.layout_notes,
+      section.style_guide
+    ].filter(Boolean).join(" "),
+    620
+  );
+  const supportPoints = onImageCopy.bullets.slice(0, visualRole === "review" ? 3 : 2);
+  const referenceModelInstruction =
+    options?.withModel && options.referenceModelImageBase64
+      ? "Image 2 is the exact person reference. Use the same person if a model appears; do not swap identity."
+      : options?.withModel
+        ? `Use one believable ${buildModelDescriptor(options)} only if it helps the section.`
+        : "Do not include a model unless the scene clearly requires hands for product use.";
+
+  return [
+    "Create one finished mobile ecommerce detail-page section PNG.",
+    buildProductFidelityInstructions(section),
+    `Section role: ${visualRole}. ${buildCodexRoleInstruction(visualRole)}`,
+    sceneDirection ? `Scene direction: ${sceneDirection}` : "",
+    desiredTone ? `Tone: ${desiredTone}.` : "",
+    referenceModelInstruction,
+    options?.outputMode === "full-image"
+      ? [
+          "Render a simple finished Korean ecommerce section with very few text elements.",
+          `Exact headline text: ${onImageCopy.headline}.`,
+          onImageCopy.subheadline ? `Exact subheadline text: ${onImageCopy.subheadline}.` : "",
+          supportPoints.length ? `Optional support labels, only if they fit: ${supportPoints.join(" / ")}.` : "",
+          "Use large readable Korean type only. No tiny text, no paragraphs, no dense tables, no clipped letters, no ellipses.",
+          "Do not draw CTA buttons, arrows, icon menus, bottom feature tiles, app-like cards, fake navigation, review counts, ratings, certifications, or claims not provided in the copy.",
+          "If the text or layout becomes crowded, remove support labels and keep only the headline, product, and one clean visual scene."
+        ].filter(Boolean).join(" ")
+      : "Do not add new marketing text. Make a clean product/photo background for later editable text overlays.",
+    "The image must match the section headline and product category. Do not borrow another product category's benefits, props, labels, or use cases.",
+    "Prioritize a complete nonblank image over a complex design. Keep the composition simple, product-first, and consistent with image 1."
+  ].filter(Boolean).join(" ");
+}
+
+function buildCodexRoleInstruction(role: PdpSectionVisualRole) {
+  switch (role) {
+    case "hero":
+      return "Make the product the first visual anchor with one strong headline.";
+    case "cta":
+      return "Close with a calm final reason to choose the product. No purchase button or fake clickable control.";
+    case "failure":
+    case "problem":
+    case "question":
+    case "concernList":
+      return "Show the customer's concrete hesitation or inconvenience, grounded in this product's real use.";
+    case "detail":
+    case "composition":
+    case "disclosure":
+    case "proof":
+      return "Show product details, parts, material, packaging, or visible proof from the reference only.";
+    case "review":
+      return "Use short testimonial-style cards only if review copy is provided; do not invent counts or ratings.";
+    case "plan":
+      return "Show a simple use sequence or hands-in-frame product action.";
+    case "lifestyle":
+    case "success":
+      return "Show a believable after-use or lifestyle moment with the product still clear.";
+    default:
+      return "Use a simple product-first commercial composition.";
+  }
+}
+
+function compactPromptText(value: string, maxLength: number) {
+  const compacted = value.replace(/\s+/g, " ").trim();
+  if (compacted.length <= maxLength) {
+    return compacted;
+  }
+
+  const clipped = compacted.slice(0, maxLength).replace(/\s+\S*$/, "").trim();
+  return clipped || compacted.slice(0, maxLength).trim();
 }
 
 function buildProductFidelityInstructions(section: SectionBlueprint) {

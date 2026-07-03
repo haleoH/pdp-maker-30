@@ -395,6 +395,7 @@ export function PdpEditor({
   saveState = "idle"
 }: PdpEditorProps) {
   const isCompleteMode = outputMode === "full-image";
+  const editorUsesCodex = aiProvider === "openai" ? !openAiApiKey : !geminiApiKey;
   const outputModeLabel = isCompleteMode ? "통이미지 모드" : "텍스트편집 모드";
   const defaultEditorNotice = initialResult.blueprint.sections.length === 1
     ? "히어로우 1장을 먼저 확인한 뒤 상세페이지 섹션 타입을 고르면 나머지 섹션을 한 번에 생성할 수 있습니다."
@@ -1747,18 +1748,22 @@ export function PdpEditor({
       });
       return next;
     });
-    setNotice(`${sectionsToGenerate.length}개 미생성 섹션 이미지를 한 번에 생성합니다.`);
+    setNotice(
+      editorUsesCodex
+        ? `${sectionsToGenerate.length}개 미생성 섹션 이미지를 순서대로 생성합니다.`
+        : `${sectionsToGenerate.length}개 미생성 섹션 이미지를 한 번에 생성합니다.`
+    );
     const batchStartedAt = Date.now();
     logEditorEvent("editor.missing_images_generation_started", {
       sectionsToGenerate: sectionsToGenerate.length,
-      totalSections: targetSections.length
+      totalSections: targetSections.length,
+      sequential: editorUsesCodex
     });
 
     let completedCount = 0;
 
     try {
-      const settledSections = await Promise.allSettled(
-        sectionsToGenerate.map(async ({ section, index }) => {
+      const generateSectionImage = async ({ section, index }: { section: PdpSection; index: number }) => {
           const sectionImageDefaults = getPdpSectionImageDefaults(section, index, targetSections.length, referenceModelUsage);
           const sectionSpecificOptions = normalizeImageOptions(
             sectionOptions[index],
@@ -1806,8 +1811,20 @@ export function PdpEditor({
             sectionId: section.section_id,
             generatedImage: toDataUrl(response.mimeType, response.imageBase64)
           };
-        })
-      );
+      };
+
+      const settledSections: Array<PromiseSettledResult<Awaited<ReturnType<typeof generateSectionImage>>>> = [];
+      if (editorUsesCodex) {
+        for (const item of sectionsToGenerate) {
+          try {
+            settledSections.push({ status: "fulfilled", value: await generateSectionImage(item) });
+          } catch (reason) {
+            settledSections.push({ status: "rejected", reason });
+          }
+        }
+      } else {
+        settledSections.push(...await Promise.allSettled(sectionsToGenerate.map(generateSectionImage)));
+      }
 
       const generatedSections: Array<{ index: number; sectionId: string; generatedImage: string }> = [];
       const failureEntries: Array<{ sectionId: string; message: string }> = [];
@@ -1859,7 +1876,7 @@ export function PdpEditor({
         setErrorMessage(failureSummary);
         setNotice(
           generatedSections.length
-            ? `${generatedSections.length}개 섹션 이미지는 저장했습니다. 남은 섹션은 API 한도나 일시 오류가 풀리면 다시 생성하세요.`
+            ? `${generatedSections.length}개 섹션 이미지는 저장했습니다. 남은 섹션은 한 장씩 다시 생성해 주세요.`
             : "섹션 이미지를 만들지 못했습니다. 아래 오류를 확인한 뒤 API 한도나 키 상태를 점검해 주세요."
         );
         logEditorEvent(
@@ -1878,7 +1895,11 @@ export function PdpEditor({
         return;
       }
 
-      setNotice(`${generatedSections.length}개 섹션 이미지를 한 번에 생성했습니다.`);
+      setNotice(
+        editorUsesCodex
+          ? `${generatedSections.length}개 섹션 이미지를 순서대로 생성했습니다.`
+          : `${generatedSections.length}개 섹션 이미지를 한 번에 생성했습니다.`
+      );
       logEditorEvent("editor.missing_images_generation_completed", {
         generatedCount: generatedSections.length,
         failedCount: 0,
