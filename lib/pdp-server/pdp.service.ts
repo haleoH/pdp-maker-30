@@ -3096,6 +3096,8 @@ function buildImagePrompt(
   const contextSubheadline = sanitizeVisibleCopy(options?.subheadline, section.section_name) || onImageCopy.subheadline;
   let enhancedPrompt = "Create a high-end, conversion-optimized commercial advertising photograph. ";
 
+  enhancedPrompt += buildProductFidelityInstructions(section);
+
   if (contextHeadline) {
     enhancedPrompt += `Context: The image should visually represent the advertising headline "${contextHeadline}"`;
     if (contextSubheadline) {
@@ -3168,6 +3170,11 @@ function buildImagePrompt(
       "Korean marketplace detail-page sections are static full images. Never draw fake clickable controls: no CTA buttons, no black rounded button bars, no white action buttons, no arrow buttons, no chevrons, no link labels, and no phrases such as 제품 확인하기, 지금 확인하기, 구매하기, 자세히 보기, or 클릭.",
       "Every visible Korean phrase must fit fully inside its card, badge, or banner. Do not use ellipses, cropped letters, clipped line endings, overflowing text, or tiny footer captions. If the phrase will not fit, remove the support card or use a shorter non-clickable benefit phrase.",
       "Avoid bottom horizontal CTA/trust bars. If the lower area needs emphasis, use one short benefit chip without any button shape or arrow.",
+      "Do not create a bottom row of app-like feature tiles, icon menu cards, navigation cards, or large decorative function buttons. If support points are needed, keep them as short text-only labels or quiet cards that never compete with the product photo.",
+      "Do not invent decorative feature icons such as bowls, fruits, ribbons, badges, checkmarks, arrows, or tool symbols unless the section is explicitly an infographic/detail section and the icon is secondary to the real product.",
+      visualRole === "hero"
+        ? "Hero layout lock: the uploaded product must be the visual anchor. Avoid large bottom feature-card grids, UI panels, icon tiles, and function-button rows in the hero; use the product, hands/usage context, and one strong headline as the first impression."
+        : "",
       "Do not make it look like plain text pasted over a generic background photo. Build a polished section layout with a clear editorial grid, intentional margins, typographic hierarchy, accent rules, large chips, roomy callout cards, product/detail frames, or comparison/info cards as appropriate to the section role.",
       visualRole === "disclosure"
         ? "Product-information section lock: this section must be detailed product information, not a generic notice or confirmation graphic. Show the actual product/package from the reference prominently, then use two large callout cards for visibly inspectable details such as patch shape, package 구성, included items, texture, use area, or storage/usage cues. Never use standalone placeholder labels like 주의사항 확인, 구성 및 옵션 안내, 구매 전 마지막 점검, or 상품정보 확인 as the main visible content."
@@ -3211,6 +3218,34 @@ function buildImagePrompt(
   }
 
   return enhancedPrompt;
+}
+
+function buildProductFidelityInstructions(section: SectionBlueprint) {
+  const haystack = [
+    section.section_name,
+    section.goal,
+    section.headline,
+    section.subheadline,
+    ...(section.bullets ?? []),
+    section.purpose,
+    section.prompt_ko,
+    section.prompt_en,
+    section.layout_notes,
+    section.reference_usage
+  ].join(" ");
+  const isKitchenOrBladeTool =
+    /(칼|필러|파채|껍질|슬라이서|커터|도구|주방|peeler|slicer|knife|blade|cutter|kitchen)/i.test(haystack);
+  const categoryLock = isKitchenOrBladeTool
+    ? "For kitchen tools or blade tools, preserve the exact blade count, blade direction, handle shape, hole/screw placement, metal cutouts, serration/teeth pattern, proportions, and grip orientation from image 1. Do not turn it into a different peeler, knife, slicer, or hybrid tool."
+    : "Preserve the exact silhouette, proportions, component layout, material, color, packaging structure, labels/logos, and all visible product-specific details from image 1.";
+
+  return [
+    "PRODUCT FIDELITY LOCK: image 1 is the source-of-truth product reference, not a loose style inspiration.",
+    categoryLock,
+    "The final image may change lighting, background, camera angle, hand/model pose, and surrounding props, but the product itself must remain the same SKU.",
+    "Do not redesign, simplify, stylize, hybridize, replace, or invent a generic product from the same category.",
+    "If any lifestyle action or layout idea conflicts with exact product preservation, simplify the scene and preserve the product."
+  ].join(" ") + " ";
 }
 
 function buildMobileReadabilityPrompt(role: PdpSectionVisualRole) {

@@ -143,6 +143,7 @@ function buildImagePrompt(prompt: string, referencePaths: string[], outputPath: 
     "API 키를 요구하지 말고 Codex의 image_generation 기능으로 처리한다.",
     "SVG, HTML, CSS, 캔버스, 수동 합성으로 대체하지 않는다.",
     "첨부된 참조 이미지를 바탕으로 새 상세페이지 섹션 PNG를 만든다.",
+    "product-reference 이미지는 스타일 참고가 아니라 실제 상품 고정 기준이다. 상품의 실루엣, 비율, 부품 구조, 칼날/손잡이/라벨/색상/재질/구멍/나사 같은 보이는 디테일을 다른 상품처럼 재해석하지 않는다.",
     "프롬프트가 통이미지 모드나 온이미지 문구를 요구하면, 프롬프트에 지정된 한국어 문구만 크게 읽히게 넣는다.",
     "근거 없는 수치, 인증, 리뷰, 효능, 순위, 배송 약속을 만들지 않는다.",
     `입력 이미지 파일: ${referencePaths.join(", ") || "없음"}`,
