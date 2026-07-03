@@ -1706,11 +1706,11 @@ export function PdpMakerClient() {
         setLongPageTranscript(null);
         longPageTranscriptCacheRef.current = null;
       }
-      // Hero generation is deferred to this client whenever we can upgrade the reference:
-      // the original upload still in memory (fresh session — enables the full-res crop) OR an
-      // attached product-photo candidate the model may pick (works on restored drafts too —
-      // the photo's payload IS persisted, unlike sourceFile). Deferring is always safe: the
-      // server still returns its heroReference as the fallback reference.
+      // Hero generation is deferred to this client when Codex is the backend so the analysis
+      // request can finish before image generation starts. The same deferred path also lets us
+      // upgrade the reference: the original upload still in memory (fresh session) OR an attached
+      // product-photo candidate the model may pick (works on restored drafts too).
+      // Deferring is always safe: the server still returns its heroReference as the fallback.
       const attachedProductImageCandidates = sourceMaterialsForDraft.filter(
         (material) =>
           material.role !== "primary" &&
@@ -1720,7 +1720,8 @@ export function PdpMakerClient() {
       );
       const hasAttachedProductImageCandidate = attachedProductImageCandidates.length > 0;
       const deferHeroGeneration = Boolean(
-        analysisStripsForAnalyze?.length && (originalSourceFile || hasAttachedProductImageCandidate)
+        selectedProviderUsesCodex ||
+        (analysisStripsForAnalyze?.length && (originalSourceFile || hasAttachedProductImageCandidate))
       );
 
       setLoadingStep("제품을 분석하고 히어로우 첫 장을 설계하는 중입니다.");

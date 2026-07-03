@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import sharp from "sharp";
 import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
-import { generateCodexImage, isCodexImageGenerationAvailable, runCodexJson, type CodexReference } from "./codex-runtime";
+import { generateCodexImage, runCodexJson, type CodexReference } from "./codex-runtime";
 import {
   inferPdpSectionVisualRole,
   inferPdpCopyProductKind,
@@ -988,14 +988,6 @@ export class PdpService {
   }
 
   private async analyzeProductWithCodex(request: PdpAnalyzeRequest) {
-    if (!isCodexImageGenerationAvailable()) {
-      throw new PdpServiceError(
-        "PDP_IMAGE_GENERATION_FAILED",
-        "Codex CLI 이미지 생성 기능이 꺼져 있습니다.",
-        "codex -c service_tier=fast --enable image_generation features list 로 image_generation=true 상태를 확인해 주세요."
-      );
-    }
-
     const normalizedImage = sanitizeBase64Payload(request.imageBase64);
     const mimeType = normalizeMimeType(request.mimeType);
     const generationImage = request.generationImageBase64
@@ -1074,7 +1066,7 @@ export class PdpService {
       fallbackMimeType: generationMimeType
     });
 
-    if (request.deferHeroGeneration && analysisStrips.length) {
+    if (request.deferHeroGeneration) {
       return {
         originalImage: heroReference.base64,
         originalImageMimeType: heroReference.mimeType,
