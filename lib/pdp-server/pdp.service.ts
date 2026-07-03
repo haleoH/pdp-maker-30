@@ -3234,7 +3234,7 @@ function buildProductFidelityInstructions(section: SectionBlueprint) {
     section.reference_usage
   ].join(" ");
   const isKitchenOrBladeTool =
-    /(칼|필러|파채|껍질|슬라이서|커터|도구|주방|peeler|slicer|knife|blade|cutter|kitchen)/i.test(haystack);
+    /(칼|필러|껍질|슬라이서|커터|도구|주방|peeler|slicer|knife|blade|cutter|kitchen)/i.test(haystack);
   const categoryLock = isKitchenOrBladeTool
     ? "For kitchen tools or blade tools, preserve the exact blade count, blade direction, handle shape, hole/screw placement, metal cutouts, serration/teeth pattern, proportions, and grip orientation from image 1. Do not turn it into a different peeler, knife, slicer, or hybrid tool."
     : "Preserve the exact silhouette, proportions, component layout, material, color, packaging structure, labels/logos, and all visible product-specific details from image 1.";
