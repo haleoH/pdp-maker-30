@@ -397,7 +397,13 @@ export function PdpEditor({
   const isCompleteMode = outputMode === "full-image";
   const editorUsesCodex = aiProvider === "openai" ? !openAiApiKey : !geminiApiKey;
   const outputModeLabel = isCompleteMode ? "통이미지 모드" : "텍스트편집 모드";
-  const defaultEditorNotice = initialResult.blueprint.sections.length === 1
+  const startsAsHamaPlanningDraft =
+    isCompleteMode &&
+    initialResult.blueprint.sections.length === 10 &&
+    initialResult.blueprint.sections.every((section) => !section.generatedImage);
+  const defaultEditorNotice = startsAsHamaPlanningDraft
+    ? "하마 10컷 기획안이 준비되었습니다. 문구와 컷 구성을 먼저 확인한 뒤 필요한 컷만 이미지 옵션에서 한 장씩 생성하세요."
+    : initialResult.blueprint.sections.length === 1
     ? "히어로우 1장을 먼저 확인한 뒤 상세페이지 섹션 타입을 고르면 나머지 섹션을 한 번에 생성할 수 있습니다."
     : isCompleteMode
       ? "통이미지 모드 전체 섹션을 확인하고 필요한 컷만 이미지 옵션에서 다시 조정할 수 있습니다."
@@ -492,6 +498,17 @@ export function PdpEditor({
   const selectedShapeLayer = selectedLayer && isShapeLayer(selectedLayer) ? selectedLayer : null;
   const generatedCount = sections.filter((section) => Boolean(section.generatedImage)).length;
   const missingImageCount = Math.max(0, sections.length - generatedCount);
+  const isHama10CutPlan = isCompleteMode && sections.length === 10 && sections.some(isHama10CutSection);
+  const imageActionLabel = currentSection?.generatedImage
+    ? "이미지 다시 만들기"
+    : isHama10CutPlan
+      ? "이 컷 이미지 생성"
+      : "이미지 생성하기";
+  const footerImageStatus = currentSection?.generatedImage
+    ? "이미지 준비 완료"
+    : isHama10CutPlan
+      ? "기획 확인 중"
+      : "이미지 생성 필요";
   const pendingDeleteSection =
     pendingDeleteSectionIndex === null ? null : sections[pendingDeleteSectionIndex] ?? null;
   const selectedExpansionStrategy =
@@ -1294,7 +1311,7 @@ export function PdpEditor({
 
             <button className={styles.primaryButtonWide} disabled={isGeneratingImage || isGeneratingAllImages} onClick={handleGenerateImage} type="button">
               {isGeneratingImage ? <Loader2 className={styles.spinIcon} size={16} /> : currentSection.generatedImage ? <RefreshCw size={16} /> : <ImageIcon size={16} />}
-              {currentSection.generatedImage ? "이미지 다시 만들기" : "이미지 생성하기"}
+              {imageActionLabel}
             </button>
 
             <p className={styles.inspectorHelper}>
@@ -1302,6 +1319,8 @@ export function PdpEditor({
                 ? "전체 미생성 섹션 이미지를 한 번에 생성하는 중입니다."
                 : usesReferenceModel
                 ? "업로드한 모델 이미지를 참조하면서 현재 섹션 컷만 다시 생성합니다."
+                : isHama10CutPlan
+                ? "현재 컷의 승인 문구와 레이아웃 메모를 기준으로 이 컷만 생성합니다."
                 : "섹션 헤드라인과 지금 선택한 모델 조건을 반영해 현재 컷만 다시 생성합니다."}
             </p>
           </div>
@@ -2870,7 +2889,7 @@ export function PdpEditor({
                   <CopyIcon size={14} />
                   현재 복제
                 </button>
-                {missingImageCount ? (
+                {missingImageCount && !isHama10CutPlan ? (
                   <button
                     className={styles.inlineButton}
                     disabled={isGeneratingAllImages || isGeneratingImage}
@@ -3122,7 +3141,9 @@ export function PdpEditor({
                           {isCurrentImageLoading
                             ? "섹션 이미지를 만드는 동안 이 화면에서 진행 상태를 확인할 수 있습니다."
                             : isCompleteMode
-                              ? "이미지 옵션을 정하고 완성형 섹션 이미지를 생성할 수 있습니다."
+                              ? isHama10CutPlan
+                                ? "문구와 컷 구성을 확인한 뒤 이 컷만 이미지로 생성할 수 있습니다."
+                                : "이미지 옵션을 정하고 완성형 섹션 이미지를 생성할 수 있습니다."
                               : "이미지 생성 옵션을 정하고 이미지를 만들면, 캔버스 안에서 바로 텍스트를 얹고 편집할 수 있습니다."}
                         </p>
                         {!isCurrentImageLoading && (currentSectionImageError || errorMessage) ? (
@@ -3225,7 +3246,7 @@ export function PdpEditor({
 
               <div className={styles.canvasFooter}>
                 <span className={styles.footerStatus}>페이지 편집 · {outputModeLabel}</span>
-                <span className={styles.footerStatus}>{currentSection.generatedImage ? "이미지 준비 완료" : "이미지 생성 필요"}</span>
+                <span className={styles.footerStatus}>{footerImageStatus}</span>
                 <span className={styles.footerStatus}>{isCompleteMode ? `생성됨 ${generatedCount}/${sections.length}` : `레이어 ${currentLayers.length}개`}</span>
                 {workbenchState.isOpen ? (
                   <span className={styles.footerStatus}>옵션 패널 열림</span>
@@ -6780,6 +6801,21 @@ function getDisplaySectionGoal(section: GeneratedResult["blueprint"]["sections"]
   }
 
   return section.goal;
+}
+
+function isHama10CutSection(section: GeneratedResult["blueprint"]["sections"][number]) {
+  const haystack = [
+    section.section_id,
+    section.section_name,
+    section.goal,
+    section.layout_notes,
+    section.compliance_notes,
+    section.purpose,
+    section.style_guide,
+    section.reference_usage
+  ].join(" ");
+
+  return /하마\s*10컷|판매\s*준비도|텍스트\s*길이\s*위험|컷\s*연결|제품\s*고정\s*포인트|포인트\s*0[123]|색상\/사이즈\/옵션|상품정보\/마지막\s*확신/.test(haystack);
 }
 
 function getModelGenderLabel(gender?: ImageGenOptions["modelGender"]) {

@@ -658,10 +658,9 @@ export class PdpService {
       fallbackMimeType: generationMimeType
     });
 
-    if (request.deferHeroGeneration && analysisStrips.length) {
-      // 2-pass mode: the client holds the ORIGINAL upload and generates the hero itself from a
-      // full-resolution productCutRegion crop. Return the blueprint with sections[0] ungenerated;
-      // heroReference stays as originalImage so the client has a working fallback reference.
+    if (request.deferHeroGeneration) {
+      // Planning-first mode returns the blueprint with sections[0] ungenerated. For long pages,
+      // heroReference may be a product crop; for ordinary product photos it is the upload itself.
       return {
         originalImage: heroReference.base64,
         originalImageMimeType: heroReference.mimeType,
@@ -1301,9 +1300,9 @@ export class PdpService {
       fallbackMimeType: generationMimeType
     });
 
-    if (request.deferHeroGeneration && analysisStrips.length) {
-      // 2-pass mode: the client generates the hero from a full-resolution productCutRegion crop
-      // of the original upload (see the Gemini path for details).
+    if (request.deferHeroGeneration) {
+      // Planning-first mode returns the blueprint with sections[0] ungenerated. For long pages,
+      // heroReference may be a product crop; for ordinary product photos it is the upload itself.
       return {
         originalImage: heroReference.base64,
         originalImageMimeType: heroReference.mimeType,
@@ -2075,6 +2074,65 @@ ${isFullImage ? "- 통이미지 모드: 모든 섹션 CTA와 CTA_en은 빈 문�
 로스터에 있는 ${style.sectionRoster.length}개 섹션만, 그 순서대로 생성하세요. 히어로는 포함하지 마세요(이미 존재합니다).`;
 }
 
+const HAMA_10CUT_SECTION_COUNT = 10;
+const HAMA_10CUT_ROSTER = [
+  { id: "S1", name: "히어로", role: "첫 화면에서 제품/대상/핵심 약속을 3초 안에 고정" },
+  { id: "S2", name: "문제/불안", role: "구매자가 지금 겪는 구체적 불편과 첫 불안을 짚기" },
+  { id: "S3", name: "핵심 가치", role: "이 제품이 왜 해결책인지 한 문장 가치로 전환" },
+  { id: "S4", name: "포인트 01", role: "첫 번째 핵심 기능을 구매자 이득으로 번역" },
+  { id: "S5", name: "포인트 02", role: "두 번째 핵심 기능을 사용 장면 이득으로 번역" },
+  { id: "S6", name: "포인트 03", role: "세 번째 핵심 기능을 선택 이유로 정리" },
+  { id: "S7", name: "비교", role: "대체 선택과 비교해 이 제품을 고를 이유를 정리" },
+  { id: "S8", name: "디테일", role: "제품 구조/재질/형태/구성처럼 눈으로 확인 가능한 근거 제시" },
+  { id: "S9", name: "색상/사이즈/옵션", role: "옵션/구성/사용 전 확인 포인트를 안전하게 안내" },
+  { id: "S10", name: "상품정보/마지막 확신", role: "구매 전 남은 불안을 줄이고 마지막 선택 이유로 마무리" }
+] as const;
+
+function buildHama10CutRosterText() {
+  return HAMA_10CUT_ROSTER.map((item, index) => `${index + 1}. ${item.id} ${item.name}: ${item.role}`).join("\n");
+}
+
+function buildHama10CutSectionRules(hasReviews: boolean) {
+  return [
+    "- 하마 10컷 모드입니다. 이 단계는 이미지 생성이 아니라, 사용자가 먼저 확인할 컷별 생산 기획안입니다.",
+    `- 전체 섹션 개수는 반드시 ${HAMA_10CUT_SECTION_COUNT}개로 맞출 것`,
+    "- 아래 로스터의 id/name/순서를 그대로 사용할 것. 컷을 추가하거나 삭제하거나 12컷 구조로 늘리지 말 것.",
+    buildHama10CutRosterText(),
+    "- 각 컷은 이전 컷을 실제 판매 흐름으로 이어받아야 합니다. 단순 섹션 나열, 같은 헤드라인 반복, 내부 기획 용어 노출은 실패입니다.",
+    "- headline/subheadline/bullets/trust_or_objection_line은 이미지에 그대로 넣어도 되는 승인 후보 문구로만 작성하세요.",
+    "- headline은 제품명만 쓰지 말고 구매자가 놓인 상황, 첫 불안, 얻고 싶은 결과 중 하나를 잡아야 합니다.",
+    "- feature는 반드시 benefit으로 번역하세요. 예: 제품 구조 -> 사용 중 어떤 불편이 줄어드는지 -> 그래서 왜 선택해야 하는지.",
+    hasReviews
+      ? "- 후기 데이터가 있으면 실제 후기에서 반복된 장점/아쉬움을 짧은 판매 문장으로 바꾸되, 별점/후기 수/검증 문구를 새로 만들지 마세요."
+      : "- 후기 데이터가 없으면 후기처럼 보이는 문장, 별점, 사용자 ID, 후기 수를 만들지 말고 제품 사진/구조/사용법/구성처럼 눈으로 확인되는 근거로 신뢰를 대체하세요.",
+    "- layout_notes에는 반드시 다음 키워드를 포함하세요: 컷 연결, 레이아웃, 참고 이미지 역할, 제품 고정 포인트, 텍스트 길이 위험, QA.",
+    "- compliance_notes에는 반드시 다음 키워드를 포함하세요: 금지 주장, 확인 필요, 판매 준비도. 판매 준비도는 '판매용 제작 가능', '판매용 전 확인 필요', '초안만 가능' 중 하나로 판단하세요.",
+    "- 제품 고정 포인트에는 원본 제품의 실루엣/비율/색/재질/부품 수/손잡이/날/홈/구멍/리벳/라벨/기능부 배치를 바꾸지 말라는 기준을 제품별로 구체화하세요.",
+    "- prompt_ko/prompt_en은 이미지 생성자가 그대로 사용할 수 있게 한 컷당 하나의 장면만 지시하세요. 복잡한 합성, 작은 설명 박스, 버튼, 링크, 앱 UI처럼 보이는 구성은 금지입니다.",
+    "- S4~S6 포인트 컷은 기능명이 아니라 구매자가 얻는 변화 중심으로 쓰고, 셋이 서로 겹치지 않아야 합니다.",
+    "- S7 비교 컷은 근거 없는 우월 표현이나 타사 비방 없이, 선택 기준 차이를 차분히 보여주세요.",
+    "- S8~S10은 원본에서 읽히지 않는 수치/인증/소재/용량/효능을 새로 만들지 말고 확인 가능한 디테일 또는 사용 전 확인 포인트로 처리하세요.",
+    "- blueprintList에는 구매자 타입(need/want/mixed), 첫 불안, 판매 준비도, 이미지 생성 전 확인해야 할 항목, 승인 후 컷별 생성이라는 정책을 요약하세요."
+  ].join("\n");
+}
+
+function buildHamaBuyerPsychologyPrompt(customerReviewAnalysis?: PdpCustomerReviewAnalysis) {
+  const hasReviews = Boolean(customerReviewAnalysis?.reviewCount);
+
+  return [
+    "# 하마/SangpeLM 구매심리 기준(강제)",
+    "- 고객 상황을 먼저 잡고 제품 설명은 그 다음에 둡니다. 첫 화면은 제품명이 아니라 '왜 지금 이 제품을 봐야 하는지'가 보여야 합니다.",
+    "- 내부적으로 구매 동기를 need, want, mixed 중 하나로 분류하고 executiveSummary 또는 blueprintList에 반영하세요.",
+    "- 첫 불안을 한 문장으로 잡으세요. 가격/효과/내구성/사용 난이도/내 제품과 맞는지 중 실제 입력 자료와 연결되는 불안만 사용합니다.",
+    "- 제품 특징은 항상 '특징 -> 사용 장면 -> 구매자 이득' 순서로 번역합니다.",
+    "- 신뢰 근거는 리뷰가 있으면 리뷰에서, 리뷰가 없으면 제품 사진/구조/구성/사용 전 확인점에서 가져옵니다.",
+    hasReviews
+      ? "- 리뷰 문장은 실제 입력 후기의 의미를 유지해 짧게 다듬고, 없는 수치/별점/인증/극적인 결과를 붙이지 마세요."
+      : "- 리뷰가 없으므로 후기형 말투, 별점, 사용자 ID, '검증된' 같은 표현은 금지입니다.",
+    "- 근거가 부족하면 확인 필요로 남기세요. 빈칸을 상상으로 채우지 마세요."
+  ].join("\n");
+}
+
 function buildAnalyzePrompt(
   sourceMode: PdpSourceMode,
   outputMode: PdpOutputMode,
@@ -2089,14 +2147,17 @@ function buildAnalyzePrompt(
   customerReviewAnalysis?: PdpCustomerReviewAnalysis,
   longPageTranscript?: string
 ) {
-  const targetSectionCount = normalizeSectionCount(sectionCount);
+  const isHamaPlanningMode = outputMode === "full-image";
+  const targetSectionCount = isHamaPlanningMode ? HAMA_10CUT_SECTION_COUNT : normalizeSectionCount(sectionCount);
   const manualBenefits = normalizeBenefitInputs(benefits);
   const imageOptimizationPrompt = buildImageOptimizationPrompt(imageOptimization);
   const longPageTranscriptPrompt = buildLongPageTranscriptPrompt(longPageTranscript);
   const sourceMaterialsPrompt = buildSourceMaterialsPrompt(sourceMaterials);
   const knowledgePrompt = buildKnowledgePrompt(knowledgeText);
   const customerReviewPrompt = buildCustomerReviewPrompt(customerReviewAnalysis);
-  const storyBrandPrompt = buildStoryBrandSellingPrompt(customerReviewAnalysis);
+  const sellingFrameworkPrompt = isHamaPlanningMode
+    ? buildHamaBuyerPsychologyPrompt(customerReviewAnalysis)
+    : buildStoryBrandSellingPrompt(customerReviewAnalysis);
   const referenceModelPrompt = referenceModelProfile
     ? `[참고 모델 이미지가 함께 제공됨]: 모델이 포함되는 컷은 업로드된 동일 인물의 정체성을 유지해야 합니다.
 - 유지할 핵심 특성: ${referenceModelProfile.keepTraits.join(", ")}
@@ -2124,7 +2185,8 @@ ${manualBenefits.map((benefit, index) => `${index + 1}. ${benefit}`).join("\n")}
         ].join("\n");
   const outputModePrompt = outputMode === "full-image"
     ? [
-        "출력 목표는 OpenAI Image 2.0 통이미지 상세페이지입니다. 각 섹션은 이미지 자체에 한국어 헤드라인, 짧은 서브카피, 최대 2개의 짧은 포인트만 포함된 완성형 디자인으로 생성될 수 있게 작성하세요.",
+        "출력 목표는 하마식 10컷 모바일 상세페이지 기획안입니다. 이 단계에서는 이미지를 만들지 않고, 승인 가능한 컷별 카피/레이아웃/이미지 지시만 설계하세요.",
+        "각 섹션은 이후 한 장씩 이미지 생성할 수 있는 완성형 통이미지 컷이어야 하며, 한국어 헤드라인, 짧은 서브카피, 최대 2개의 짧은 포인트만 포함되게 작성하세요.",
         "한국 쇼핑몰 상세페이지 통이미지는 실제 링크를 걸 수 없습니다. 이미지 안에 버튼, 화살표 버튼, 링크처럼 보이는 CTA, '제품 확인하기', '지금 확인하기', '구매하기', '자세히 보기' 같은 문구를 만들지 마세요.",
         "모바일폰 가독성이 최우선입니다. 1080px 폭 결과물이 390px 스마트폰 화면에 축소되어도 확대 없이 읽혀야 하므로, 긴 문장/작은 본문/복잡한 표/촘촘한 설명 박스/각주형 텍스트는 만들지 마세요.",
         "문구가 카드나 배너 안에서 잘리거나 말줄임표로 끝나면 실패입니다. 공간이 부족하면 문구를 줄이거나 보조 카드 자체를 빼고, 절대 잘린 텍스트를 남기지 마세요.",
@@ -2137,7 +2199,9 @@ ${manualBenefits.map((benefit, index) => `${index + 1}. ${benefit}`).join("\n")}
       "다만 제품 패키지, 라벨, 로고처럼 원본 제품에 이미 인쇄된 글자와 브랜드 표기는 제품 정체성으로 보존해야 합니다.",
       "편집 가능한 텍스트 레이어가 올라갈 위치를 고려해 사진 안에 의도적인 여백, 어두운/밝은 면, 제품 주변의 호흡을 남기세요. 인물 얼굴이나 제품 핵심이 헤드라인 영역과 겹치지 않게 섹션별로 좌/우/하단 여백을 설계하세요."
     ].join("\n");
-  const sectionStructureRules = targetSectionCount === 1
+  const sectionStructureRules = isHamaPlanningMode
+    ? buildHama10CutSectionRules(Boolean(customerReviewAnalysis?.reviewCount))
+    : targetSectionCount === 1
     ? [
         `- 전체 섹션 개수는 반드시 1개로 맞출 것`,
         "- 이 1장은 히어로우 페이지만 설계할 것",
@@ -2185,18 +2249,18 @@ ${referenceModelPrompt}
 ${manualBenefitsPrompt}
 ${knowledgePrompt}
 ${customerReviewPrompt}
-${storyBrandPrompt}
+${sellingFrameworkPrompt}
 
 # 섹션 템플릿(필수 필드)
 - section_id: S1~S${targetSectionCount}
-- section_name: (예: 히어로/체크리스트/핵심 장점/근거/사용법/후기 등)
+- section_name: ${isHamaPlanningMode ? "하마 10컷 로스터의 이름을 그대로 사용" : "(예: 히어로/체크리스트/핵심 장점/근거/사용법/후기 등)"}
 - goal: 이 섹션의 역할(짧은 한 문장)
 - headline: 한국어 1줄(강하게)
 - headline_en: headline의 자연스러운 영어 번역 1줄
 - subheadline: 한국어 1줄(명확하게)
 - subheadline_en: subheadline의 자연스러운 영어 번역 1줄
-- bullets: 한국어 3개(스캔용, 각 1줄)
-- bullets_en: bullets의 자연스러운 영어 번역 3개
+- bullets: ${isHamaPlanningMode ? "한국어 2~3개(스캔용, 각 1줄, 이미지에 들어가도 되는 짧은 문구)" : "한국어 3개(스캔용, 각 1줄)"}
+- bullets_en: bullets의 자연스러운 영어 번역
 - trust_or_objection_line: 한국어 불안 제거/신뢰 1문장
 - trust_or_objection_line_en: trust_or_objection_line의 자연스러운 영어 번역 1문장
 - CTA: 통이미지 모드에서는 빈 문자열. 텍스트편집 모드에서만 실제 버튼/행동 문구가 필요할 때 한국어 1줄
@@ -3089,6 +3153,7 @@ function buildImagePrompt(
   options?: InternalImageGenOptions
 ) {
   const visualRole = inferPdpSectionVisualRole(section);
+  const isHamaSection = isHama10CutSection(section);
   const baseSceneDirection = getBaseSceneDirection(section, options?.guidePriorityMode ?? "guide-first");
   const onImageCopy = buildOnImageCopy(section, options);
   const mobileReadabilityPrompt = buildMobileReadabilityPrompt(visualRole);
@@ -3165,6 +3230,9 @@ function buildImagePrompt(
   if (options?.outputMode === "full-image") {
     enhancedPrompt += [
       "IMPORTANT: This is a complete ecommerce detail-page section image, not a blank photo for later editing.",
+      isHamaSection
+        ? "Hama 10-cut production lock: treat this as one approved 860x1100-style Korean mobile detail-page cut. Follow the section's layout_notes as the production manifest, use only the approved copy below, and do not add new slogans, UI widgets, claims, review badges, or extra feature cards."
+        : "",
       "Include only a few clean, large, legible Korean typography elements directly inside the image using the provided copy.",
       mobileReadabilityPrompt,
       "Korean marketplace detail-page sections are static full images. Never draw fake clickable controls: no CTA buttons, no black rounded button bars, no white action buttons, no arrow buttons, no chevrons, no link labels, and no phrases such as 제품 확인하기, 지금 확인하기, 구매하기, 자세히 보기, or 클릭.",
@@ -3226,6 +3294,7 @@ function buildCodexImagePrompt(
   options?: InternalImageGenOptions
 ) {
   const visualRole = inferPdpSectionVisualRole(section);
+  const isHamaSection = isHama10CutSection(section);
   const onImageCopy = buildOnImageCopy(section, options);
   const sceneDirection = compactPromptText(
     [
@@ -3246,6 +3315,9 @@ function buildCodexImagePrompt(
 
   return [
     "Create one finished mobile ecommerce detail-page section PNG.",
+    isHamaSection
+      ? "Hama 10-cut lock: this is one approved Korean mobile detail-page cut. Use the section copy exactly, follow layout_notes as the manifest, keep the layout premium-minimal, and do not add unapproved claims, buttons, ratings, review counts, extra cards, or decorative icons."
+      : "",
     buildProductFidelityInstructions(section),
     `Section role: ${visualRole}. ${buildCodexRoleInstruction(visualRole)}`,
     sceneDirection ? `Scene direction: ${sceneDirection}` : "",
@@ -3265,6 +3337,21 @@ function buildCodexImagePrompt(
     "The image must match the section headline and product category. Do not borrow another product category's benefits, props, labels, or use cases.",
     "Prioritize a complete nonblank image over a complex design. Keep the composition simple, product-first, and consistent with image 1."
   ].filter(Boolean).join(" ");
+}
+
+function isHama10CutSection(section: SectionBlueprint) {
+  const haystack = [
+    section.section_id,
+    section.section_name,
+    section.goal,
+    section.layout_notes,
+    section.compliance_notes,
+    section.purpose,
+    section.style_guide,
+    section.reference_usage
+  ].join(" ");
+
+  return /하마\s*10컷|판매\s*준비도|텍스트\s*길이\s*위험|컷\s*연결|제품\s*고정\s*포인트|포인트\s*0[123]|색상\/사이즈\/옵션|상품정보\/마지막\s*확신/.test(haystack);
 }
 
 function buildCodexRoleInstruction(role: PdpSectionVisualRole) {

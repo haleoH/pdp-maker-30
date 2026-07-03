@@ -83,6 +83,9 @@ type SectionImageBatchResult = {
 };
 
 const INITIAL_HERO_SECTION_COUNT = 1;
+const HAMA_PLANNING_SECTION_COUNT = 10;
+const HAMA_PLANNING_NOTICE =
+  "하마 10컷 기획안이 준비되었습니다. 자동 이미지 생성은 멈춰두었습니다. 문구와 컷 구성을 확인한 뒤 필요한 컷만 이미지 옵션에서 한 장씩 생성하세요.";
 const APP_TITLE = "한이룸의 상세페이지 마법사 3.0";
 const NOTICE_DISMISSED_STORAGE_KEY = "hanirum-pdp-maker-notice-dismissed";
 const KNOWLEDGE_STORAGE_KEY = "hanirum-pdp-maker-knowledge-items";
@@ -333,6 +336,8 @@ export function PdpMakerClient() {
   const hasAvailableGeminiKey = Boolean(effectiveGeminiApiKey);
   const hasAvailableOpenAiKey = Boolean(effectiveOpenAiApiKey);
   const processingProvider: PdpAiProvider = outputMode === "full-image" ? "openai" : aiProvider;
+  const isHamaPlanningMode = outputMode === "full-image";
+  const analyzeSectionCount = isHamaPlanningMode ? HAMA_PLANNING_SECTION_COUNT : INITIAL_HERO_SECTION_COUNT;
   const selectedProviderUsesCodex = processingProvider === "openai" ? !hasAvailableOpenAiKey : !hasAvailableGeminiKey;
   const hasPendingCustomerReviewAnalysis = Boolean(customerReviewSource && !customerReviewAnalysis);
   const canContinueToDetails = Boolean(preparedImage && (!modelImage || modelImageUsage) && !hasPendingCustomerReviewAnalysis);
@@ -345,8 +350,8 @@ export function PdpMakerClient() {
   const selectedProviderLabel = AI_PROVIDER_OPTIONS.find((option) => option.value === processingProvider)?.label ?? "Gemini";
   const selectedOutputMode = OUTPUT_MODE_OPTIONS.find((option) => option.value === outputMode) ?? OUTPUT_MODE_OPTIONS[0];
   const estimatedProcessingSeconds = useMemo(
-    () => (selectedProviderUsesCodex ? 540 : processingProvider === "openai" ? 180 : 150) + INITIAL_HERO_SECTION_COUNT * 20 + (modelImage ? 30 : 0),
-    [modelImage, processingProvider, selectedProviderUsesCodex]
+    () => (selectedProviderUsesCodex ? 540 : processingProvider === "openai" ? 180 : 150) + analyzeSectionCount * 20 + (modelImage ? 30 : 0),
+    [analyzeSectionCount, modelImage, processingProvider, selectedProviderUsesCodex]
   );
   const elapsedProcessingSeconds = loadingStartedAt ? Math.max(0, Math.floor((Date.now() - loadingStartedAt) / 1000)) : 0;
   const remainingProcessingSeconds = loadingStartedAt
@@ -829,7 +834,7 @@ export function PdpMakerClient() {
       aiProvider,
       sourceMode: "auto" as const,
       outputMode,
-      sectionCount: result?.blueprint.sections.length ?? INITIAL_HERO_SECTION_COUNT,
+      sectionCount: result?.blueprint.sections.length ?? analyzeSectionCount,
       benefits: [],
       notice: editorDraftState?.notice ?? notice,
       editorState: result ? editorDraftState ?? createDefaultEditorDraftState(result, outputMode) : null,
@@ -843,7 +848,7 @@ export function PdpMakerClient() {
           ? longPageTranscriptCacheRef.current.key
           : undefined
     };
-  }, [activeDraftId, additionalInfo, aiProvider, appState, aspectRatio, customerReviewAnalysis, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, longPageTranscript, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, sourceMaterials]);
+  }, [activeDraftId, additionalInfo, aiProvider, analyzeSectionCount, appState, aspectRatio, customerReviewAnalysis, desiredTone, draftCreatedAt, editorDraftState, hasDraftContent, longPageTranscript, modelImage, modelImageUsage, notice, outputMode, preparedImage, result, sourceMaterials]);
 
   const persistDraft = useCallback(
     async (mode: "manual" | "auto" | "switch" = "manual", options?: { showToast?: boolean }) => {
@@ -1733,11 +1738,16 @@ export function PdpMakerClient() {
       );
       const hasAttachedProductImageCandidate = attachedProductImageCandidates.length > 0;
       const deferHeroGeneration = Boolean(
+        isHamaPlanningMode ||
         selectedProviderUsesCodex ||
         (analysisStripsForAnalyze?.length && (originalSourceFile || hasAttachedProductImageCandidate))
       );
 
-      setLoadingStep("제품을 분석하고 히어로우 첫 장을 설계하는 중입니다.");
+      setLoadingStep(
+        isHamaPlanningMode
+          ? "제품을 분석하고 하마 10컷 기획안을 만드는 중입니다."
+          : "제품을 분석하고 히어로우 첫 장을 설계하는 중입니다."
+      );
 
       const response = await apiJson<PdpAnalyzeResponse>("/pdp/analyze", {
         method: "POST",
@@ -1762,7 +1772,7 @@ export function PdpMakerClient() {
           knowledgeText: knowledgeText || undefined,
           desiredTone: desiredTone.trim() || undefined,
           aspectRatio,
-          sectionCount: INITIAL_HERO_SECTION_COUNT
+          sectionCount: analyzeSectionCount
         })
       }, { geminiApiKey: currentGeminiApiKey, openAiApiKey: currentOpenAiApiKey, timeoutMs: GENERATION_API_TIMEOUT_MS });
 
@@ -1890,12 +1900,10 @@ export function PdpMakerClient() {
           hadOriginalFile: Boolean(originalSourceFile)
         });
 
-        // The server skipped hero generation (deferHeroGeneration); generate it now with the
-        // same options the server path would have used, but with the upgraded reference. On
-        // failure the hero stays ungenerated and generateMissingSectionImages below retries it,
-        // so a persistent failure lands in the existing failedCount UX instead of vanishing.
+        // The server skipped hero generation (deferHeroGeneration). Non-planning flows can still
+        // generate the hero here; Hama mode intentionally stops at the 10-cut blueprint.
         const heroSection = nextResult.blueprint.sections[0];
-        if (heroSection && !heroSection.generatedImage) {
+        if (!isHamaPlanningMode && heroSection && !heroSection.generatedImage) {
           setLoadingStep("히어로우 첫 장을 생성하는 중입니다.");
           try {
             const heroResponse = await apiJson<PdpGenerateImageResponse>("/pdp/images", {
@@ -1957,17 +1965,34 @@ export function PdpMakerClient() {
       }
 
       setLoadingProgress(42);
-      const batchResult = await generateMissingSectionImages({
+      let batchResult: SectionImageBatchResult = {
         result: nextResult,
-        provider: processingProvider,
-        geminiApiKey: currentGeminiApiKey,
-        openAiApiKey: currentOpenAiApiKey
-      });
-      nextResult = batchResult.result;
+        failedCount: 0,
+        errorMessage: "",
+        errorDetail: ""
+      };
+      if (isHamaPlanningMode) {
+        setLoadingStep("하마 10컷 기획안을 편집 화면에 준비하는 중입니다.");
+        setLoadingProgress(92);
+        logSetupEvent("setup.section_image_batch_skipped", {
+          reason: "hama_planning_requires_approval",
+          sectionCount: nextResult.blueprint.sections.length
+        });
+      } else {
+        batchResult = await generateMissingSectionImages({
+          result: nextResult,
+          provider: processingProvider,
+          geminiApiKey: currentGeminiApiKey,
+          openAiApiKey: currentOpenAiApiKey
+        });
+        nextResult = batchResult.result;
+      }
 
-      const baseCompletedNotice = batchResult.failedCount
-        ? `${selectedOutputMode.label} 히어로우 분석은 완료되었습니다. ${batchResult.failedCount}개 이미지는 생성에 실패했지만, 편집 화면에서 이어서 만들 수 있습니다.`
-        : "히어로우 1장이 준비되었습니다. 먼저 첫 장을 확인한 뒤 왼쪽에서 상세페이지 섹션 타입을 고르고 나머지 섹션을 한 번에 생성하세요.";
+      const baseCompletedNotice = isHamaPlanningMode
+        ? HAMA_PLANNING_NOTICE
+        : batchResult.failedCount
+          ? `${selectedOutputMode.label} 히어로우 분석은 완료되었습니다. ${batchResult.failedCount}개 이미지는 생성에 실패했지만, 편집 화면에서 이어서 만들 수 있습니다.`
+          : "히어로우 1장이 준비되었습니다. 먼저 첫 장을 확인한 뒤 왼쪽에서 상세페이지 섹션 타입을 고르고 나머지 섹션을 한 번에 생성하세요.";
       const insightNotice =
         usedLongDetailStrips && (sellingPointCount > 0 || weaknessCount > 0)
           ? ` 업로드한 상세페이지에서 셀링포인트 ${sellingPointCount}개와 개선 포인트 ${weaknessCount}개를 읽어 새 구성에 반영했습니다.`
@@ -1989,9 +2014,13 @@ export function PdpMakerClient() {
           : " 상세페이지 원문 받아쓰기에 실패해 이번 결과는 이미지 판독만으로 생성됐습니다. 다시 생성하면 받아쓰기를 재시도합니다."
         : "";
       const heroReferenceNotice = usedAttachedProductImage
-        ? ` 제품 생김새는 함께 올려주신 "${attachedProductImageFileName || "제품 사진"}"을 참조해 생성했습니다.`
+        ? isHamaPlanningMode
+          ? ` 제품 생김새 기준은 함께 올려주신 "${attachedProductImageFileName || "제품 사진"}"으로 잡았습니다.`
+          : ` 제품 생김새는 함께 올려주신 "${attachedProductImageFileName || "제품 사진"}"을 참조해 생성했습니다.`
         : heroReferenceUpgraded
-          ? " 제품 생김새는 상세페이지에서 원본 화질로 잘라낸 제품컷을 참조했습니다."
+          ? isHamaPlanningMode
+            ? " 제품 생김새 기준은 상세페이지에서 원본 화질로 잘라낸 제품컷으로 잡았습니다."
+            : " 제품 생김새는 상세페이지에서 원본 화질로 잘라낸 제품컷을 참조했습니다."
           : "";
       // Failure-visibility: when the tool could not confidently identify a clean product cut (or the
       // page shows several products), surface a PROMINENT warning banner with a fix action instead of
@@ -2003,11 +2032,17 @@ export function PdpMakerClient() {
       const heroWarning = usedAttachedProductImage
         ? ""
         : hasAttachedProductImageCandidate
-          ? "히어로 제품 확인 필요 — 함께 올려주신 제품 이미지 중 어떤 것이 주력 제품인지 확신하지 못해 이번 생성에는 사용하지 못했어요. [추가 정보]에 정확한 제품명을 적거나, 주력 제품 사진 1장만 남기고 다시 생성하면 정확해집니다."
+          ? isHamaPlanningMode
+            ? "제품 기준 확인 필요 — 함께 올려주신 제품 이미지 중 어떤 것이 주력 제품인지 확신하지 못했어요. [추가 정보]에 정확한 제품명을 적거나, 주력 제품 사진 1장만 남기고 다시 생성하면 기획안 기준이 정확해집니다."
+            : "히어로 제품 확인 필요 — 함께 올려주신 제품 이미지 중 어떤 것이 주력 제품인지 확신하지 못해 이번 생성에는 사용하지 못했어요. [추가 정보]에 정확한 제품명을 적거나, 주력 제품 사진 1장만 남기고 다시 생성하면 정확해집니다."
           : multiProductDetected
-            ? "히어로 제품 확인 필요 — 업로드한 상세페이지에 제품이 여러 개 보여서, 히어로에 의도와 다른 제품이 들어갔을 수 있어요. 히어로 제품이 실제와 다르면 [추가 정보]에 정확한 제품명을 적거나, 제품만 단독으로 나온 깨끗한 사진 1장을 같은 업로드 칸에 추가해 다시 생성하세요."
+            ? isHamaPlanningMode
+              ? "제품 기준 확인 필요 — 업로드한 상세페이지에 제품이 여러 개 보여서, 기획안 기준 제품이 의도와 다를 수 있어요. [추가 정보]에 정확한 제품명을 적거나, 제품만 단독으로 나온 깨끗한 사진 1장을 같은 업로드 칸에 추가해 다시 생성하세요."
+              : "히어로 제품 확인 필요 — 업로드한 상세페이지에 제품이 여러 개 보여서, 히어로에 의도와 다른 제품이 들어갔을 수 있어요. 히어로 제품이 실제와 다르면 [추가 정보]에 정확한 제품명을 적거나, 제품만 단독으로 나온 깨끗한 사진 1장을 같은 업로드 칸에 추가해 다시 생성하세요."
             : productCutUncertain
-              ? "히어로 제품 확인 필요 — 이 상세페이지에서 ‘깨끗한 제품컷’을 확신하지 못해(배너·연출컷 위주) 대표 구간으로 히어로를 만들었어요. 히어로 제품이 실제와 다르면 [추가 정보]에 정확한 제품명을 적거나, 제품만 단독으로 나온 깨끗한 사진 1장을 같은 업로드 칸에 추가해 다시 생성하세요."
+              ? isHamaPlanningMode
+                ? "제품 기준 확인 필요 — 이 상세페이지에서 ‘깨끗한 제품컷’을 확신하지 못해 기획안 기준 제품이 흐릴 수 있어요. [추가 정보]에 정확한 제품명을 적거나, 제품만 단독으로 나온 깨끗한 사진 1장을 같은 업로드 칸에 추가해 다시 생성하세요."
+                : "히어로 제품 확인 필요 — 이 상세페이지에서 ‘깨끗한 제품컷’을 확신하지 못해(배너·연출컷 위주) 대표 구간으로 히어로를 만들었어요. 히어로 제품이 실제와 다르면 [추가 정보]에 정확한 제품명을 적거나, 제품만 단독으로 나온 깨끗한 사진 1장을 같은 업로드 칸에 추가해 다시 생성하세요."
               : "";
       const completedNotice = `${baseCompletedNotice}${insightNotice}${transcriptNotice}${heroReferenceNotice}`;
       const nextEditorDraftState = {
@@ -2036,7 +2071,7 @@ export function PdpMakerClient() {
           aiProvider: processingProvider,
           sourceMode: "auto" as const,
           outputMode,
-          sectionCount: nextResult.blueprint.sections.length || INITIAL_HERO_SECTION_COUNT,
+          sectionCount: nextResult.blueprint.sections.length || analyzeSectionCount,
           benefits: [],
           notice: completedNotice,
           editorState: nextEditorDraftState,
@@ -2088,6 +2123,7 @@ export function PdpMakerClient() {
         outputMode,
         sectionCount: nextResult.blueprint.sections.length,
         failedImageCount: batchResult.failedCount,
+        imageGenerationSkipped: isHamaPlanningMode,
         durationMs: Date.now() - analyzeStartedAt
       });
       requestAnimationFrame(() => {
