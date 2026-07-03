@@ -2096,6 +2096,7 @@ function buildHama10CutSectionRules(hasReviews: boolean) {
   return [
     "- 하마 10컷 모드입니다. 이 단계는 이미지 생성이 아니라, 사용자가 먼저 확인할 컷별 생산 기획안입니다.",
     `- 전체 섹션 개수는 반드시 ${HAMA_10CUT_SECTION_COUNT}개로 맞출 것`,
+    "- 소스 우선순위는 반드시 지킬 것: 검증된 제품 사실/제품 사진 > 표시광고·근거 없는 주장 방지 > 구매심리/카피 논리 > 하마 10컷 레이아웃 > 일반 마켓 관습.",
     "- 아래 로스터의 id/name/순서를 그대로 사용할 것. 컷을 추가하거나 삭제하거나 12컷 구조로 늘리지 말 것.",
     buildHama10CutRosterText(),
     "- 각 컷은 이전 컷을 실제 판매 흐름으로 이어받아야 합니다. 단순 섹션 나열, 같은 헤드라인 반복, 내부 기획 용어 노출은 실패입니다.",
@@ -2108,11 +2109,15 @@ function buildHama10CutSectionRules(hasReviews: boolean) {
     "- layout_notes에는 반드시 다음 키워드를 포함하세요: 컷 연결, 레이아웃, 참고 이미지 역할, 제품 고정 포인트, 텍스트 길이 위험, QA.",
     "- compliance_notes에는 반드시 다음 키워드를 포함하세요: 금지 주장, 확인 필요, 판매 준비도. 판매 준비도는 '판매용 제작 가능', '판매용 전 확인 필요', '초안만 가능' 중 하나로 판단하세요.",
     "- 제품 고정 포인트에는 원본 제품의 실루엣/비율/색/재질/부품 수/손잡이/날/홈/구멍/리벳/라벨/기능부 배치를 바꾸지 말라는 기준을 제품별로 구체화하세요.",
+    "- 상품 사진 분석을 먼저 반영하세요: 깨끗한 제품컷, 디테일 클로즈업, 사용 장면, 기존 상세페이지, 사이즈/스펙표, 옵션/색상, 패키지/라벨/주의사항 이미지를 구분하고 컷별 추천 배치를 layout_notes에 녹이세요.",
+    "- 톤은 베이지/아이보리 고정이 아닙니다. 제품 사진, 카테고리, 소재, 사용 장소, 타깃, 브랜드 분위기를 분석해 메인 팔레트 3~5색, 소재/배경 무드, 컷별 배경 변주, 금지 톤을 style_guide 또는 blueprintList에 반드시 남기세요.",
+    "- 히어로는 buyer-situation hook을 먼저 세우되, 시각 위계는 브랜드 가장 작게, 한국어 훅 중간, 상품명 가장 크게 잡으세요. 상품명만 크게 쓰는 첫 화면은 실패입니다.",
     "- prompt_ko/prompt_en은 이미지 생성자가 그대로 사용할 수 있게 한 컷당 하나의 장면만 지시하세요. 복잡한 합성, 작은 설명 박스, 버튼, 링크, 앱 UI처럼 보이는 구성은 금지입니다.",
-    "- S4~S6 포인트 컷은 기능명이 아니라 구매자가 얻는 변화 중심으로 쓰고, 셋이 서로 겹치지 않아야 합니다.",
-    "- S7 비교 컷은 근거 없는 우월 표현이나 타사 비방 없이, 선택 기준 차이를 차분히 보여주세요.",
-    "- S8~S10은 원본에서 읽히지 않는 수치/인증/소재/용량/효능을 새로 만들지 말고 확인 가능한 디테일 또는 사용 전 확인 포인트로 처리하세요.",
-    "- blueprintList에는 구매자 타입(need/want/mixed), 첫 불안, 판매 준비도, 이미지 생성 전 확인해야 할 항목, 승인 후 컷별 생성이라는 정책을 요약하세요."
+    "- S4~S6 포인트 컷은 기능명이 아니라 구매자가 얻는 변화 중심으로 쓰고, 셋이 서로 겹치지 않아야 합니다. 큰 카피 + 제품/사진 + 넓은 여백 + 최대 1개 디테일 줌만 허용하고 아이콘칩/카드/라벨 과밀은 실패입니다.",
+    "- S7 비교 컷은 승인 카피의 읽는 방향을 먼저 정하세요. 기본은 일반/기존 불편/문제 쪽을 왼쪽, 이 제품/해결 쪽을 오른쪽에 두며, 표 좌우·화살표 방향·시각 강조가 같은 의미여야 합니다. 타사 비방, 절대 우위, best/No.1/100%/guaranteed는 금지입니다.",
+    "- S8~S10은 페이지 번호나 비공식 영어 제목을 넣지 마세요. 원본에서 읽히지 않는 수치/인증/소재/용량/효능은 새로 만들지 말고 확인 가능한 디테일 또는 사용 전 확인 포인트로 처리하세요.",
+    "- 사용/기능 장면이 있는 컷은 active part, target object, contact point, motion direction, plausible result를 layout_notes에 명시하세요. 적합한 참고 이미지가 없으면 가짜 사용 장면 대신 정적 제품/디테일 컷으로 바꾸세요.",
+    "- blueprintList에는 입력 정보 정리, 사진 분석/배치 추천, 구매자 타입(need/want/mixed), 첫 불안, 상페 카피 스킬 적용 요약, 기능→혜택 전환, 제거한 과장/번역투, 전체 톤앤매너, 판매 준비도, 이미지 제작 전 확인 항목, 10컷 제작 매니페스트 요약을 반드시 포함하세요."
   ].join("\n");
 }
 
@@ -3233,6 +3238,7 @@ function buildImagePrompt(
       isHamaSection
         ? "Hama 10-cut production lock: treat this as one approved 860x1100-style Korean mobile detail-page cut. Follow the section's layout_notes as the production manifest, use only the approved copy below, and do not add new slogans, UI widgets, claims, review badges, or extra feature cards."
         : "",
+      isHamaSection ? buildHamaProductionContract(section, visualRole, onImageCopy, baseSceneDirection, desiredTone) : "",
       "Include only a few clean, large, legible Korean typography elements directly inside the image using the provided copy.",
       mobileReadabilityPrompt,
       "Korean marketplace detail-page sections are static full images. Never draw fake clickable controls: no CTA buttons, no black rounded button bars, no white action buttons, no arrow buttons, no chevrons, no link labels, and no phrases such as 제품 확인하기, 지금 확인하기, 구매하기, 자세히 보기, or 클릭.",
@@ -3319,6 +3325,7 @@ function buildCodexImagePrompt(
       ? "Hama 10-cut lock: this is one approved Korean mobile detail-page cut. Use the section copy exactly, follow layout_notes as the manifest, keep the layout premium-minimal, and do not add unapproved claims, buttons, ratings, review counts, extra cards, or decorative icons."
       : "",
     buildProductFidelityInstructions(section),
+    isHamaSection ? buildHamaProductionContract(section, visualRole, onImageCopy, sceneDirection, desiredTone) : "",
     `Section role: ${visualRole}. ${buildCodexRoleInstruction(visualRole)}`,
     sceneDirection ? `Scene direction: ${sceneDirection}` : "",
     desiredTone ? `Tone: ${desiredTone}.` : "",
@@ -3352,6 +3359,91 @@ function isHama10CutSection(section: SectionBlueprint) {
   ].join(" ");
 
   return /하마\s*10컷|판매\s*준비도|텍스트\s*길이\s*위험|컷\s*연결|제품\s*고정\s*포인트|포인트\s*0[123]|색상\/사이즈\/옵션|상품정보\/마지막\s*확신/.test(haystack);
+}
+
+function buildHamaProductionContract(
+  section: SectionBlueprint,
+  visualRole: PdpSectionVisualRole,
+  copy: ReturnType<typeof buildOnImageCopy>,
+  sceneDirection: string,
+  desiredTone?: string
+) {
+  const approvedCopy = [
+    copy.headline ? `상단 큰 문구: ${copy.headline}` : "",
+    copy.subheadline ? `중간 보조 문구: ${copy.subheadline}` : "",
+    copy.bullets.length ? `포인트/본문 문구: ${copy.bullets.join(" / ")}` : "",
+    copy.trustLine ? `하단 신뢰 문구: ${copy.trustLine}` : ""
+  ].filter(Boolean).join("\n");
+  const functionalSceneNeeded = /사용|use|기능|동작|접촉|자르|열|닫|붙|장착|착용|충전|pour|cut|open|hold|mount|attach/i.test([
+    section.section_name,
+    section.goal,
+    section.headline,
+    section.subheadline,
+    section.purpose,
+    section.prompt_ko,
+    section.prompt_en,
+    section.layout_notes
+  ].join(" "));
+  const roleLabel = inferHamaCutRoleLabel(section, visualRole);
+
+  return [
+    "[제품 고정정보 / PRODUCT FIDELITY LOCK]",
+    "The product/reference image is the exact sale SKU source of truth, not a loose style inspiration.",
+    "Preserve silhouette, proportions, color, material feel, component count, labels/logos, holes, slots, teeth, rivets, seams, blades, handles, hinges, openings, buttons, ports, brackets, and every visible functional part.",
+    "The scene may change background, lighting, camera angle, props, and hand/model pose, but must not redesign, simplify, hybridize, or replace the product with a similar item.",
+    section.reference_usage ? `현재 상품 lock 요약: ${compactPromptText(section.reference_usage, 420)}` : "",
+    "",
+    "[컷 역할]",
+    `${roleLabel}. 이전 컷의 구매자 감정/판단/기대를 이어받아 이번 컷의 메시지로 넘긴다.`,
+    section.layout_notes ? `컷 연결/매니페스트: ${compactPromptText(section.layout_notes, 520)}` : "",
+    "",
+    "[섹션 역할별 연출 지시]",
+    `${buildCodexRoleInstruction(visualRole)} 모든 컷이 같은 구도나 같은 배경처럼 반복되면 실패입니다.`,
+    "",
+    "[승인된 한국어 문구]",
+    approvedCopy || "이미지 안에는 승인된 짧은 한국어 문구만 사용하고 새 문구를 만들지 말 것.",
+    "",
+    "[레이아웃]",
+    "860x1100 세로형 하마 모바일 상세페이지 컷. Product/category/photo-based selected palette, premium minimal, mobile-readable Korean typography.",
+    "Beige/ivory/light gray may be used only if selected by the tone analysis; do not force the same beige background across all cuts.",
+    desiredTone ? `사용자 톤 요청: ${desiredTone}` : "",
+    section.style_guide ? `승인 톤/스타일: ${compactPromptText(section.style_guide, 520)}` : "",
+    "",
+    "[이미지 구성]",
+    compactPromptText(sceneDirection, 700),
+    "Include the approved tone plan and this cut's role-specific background variation. Do not repeat the same plain background across all cuts unless the approved tone plan explicitly requires it.",
+    "",
+    "[기능 장면 검증]",
+    functionalSceneNeeded
+      ? "For this use/function scene, show the correct active part, target object, contact point, motion direction, and physically plausible result. If the correct mechanism cannot be shown from references, switch to a static product/detail cut."
+      : "정적 제품/디테일 컷. Do not fake an active use scene.",
+    "",
+    "[레퍼런스 사용]",
+    "Use image 1 as the clean product/SKU reference first. Use only relevant supporting references if provided; do not visually average unrelated references.",
+    "",
+    "[금지]",
+    "No fake reviews, stars, rankings, certifications, delivery promises, discounts, unsupported performance/safety claims, non-official English headings, page counters, CTA buttons, link-like UI, excessive icons/badges, or product-shape changes.",
+    "",
+    "[텍스트 안전 / 모바일 가독성]",
+    "All Korean text must be inside safe margins, fully visible, and readable when a 1080px-wide output is viewed at 390px phone width.",
+    "For 860x1100, target title about 58-76px, subcopy 30-40px, body/table 24-32px, small notes 20-24px minimum. Large titles need at least 120px top safe margin.",
+    "No ellipses, cropped letters, broken Hangul, random English, tiny footnotes, overflowing card text, or crowded tables. If crowded, reduce rows/cards instead of shrinking text."
+  ].filter(Boolean).join("\n");
+}
+
+function inferHamaCutRoleLabel(section: SectionBlueprint, fallbackRole: PdpSectionVisualRole) {
+  const key = `${section.section_id} ${section.section_name}`.toLowerCase();
+  if (/\bs10\b|product\s*info|cta|상품정보|마지막/.test(key)) return "Cut 10 / Product Info";
+  if (/\bs9\b|color|size|option|색상|사이즈|옵션/.test(key)) return "Cut 9 / Color-Size-Option";
+  if (/\bs8\b|detail|디테일/.test(key)) return "Cut 8 / Detail";
+  if (/\bs7\b|comparison|비교/.test(key)) return "Cut 7 / Comparison";
+  if (/\bs6\b|point\s*03|포인트\s*03/.test(key)) return "Cut 6 / Point 03";
+  if (/\bs5\b|point\s*02|포인트\s*02/.test(key)) return "Cut 5 / Point 02";
+  if (/\bs4\b|point\s*01|포인트\s*01/.test(key)) return "Cut 4 / Point 01";
+  if (/\bs3\b|core|핵심\s*가치/.test(key)) return "Cut 3 / Core Values";
+  if (/\bs2\b|problem|trust|문제|불안/.test(key)) return "Cut 2 / Problem or Trust Substitute";
+  if (/\bs1\b|hero|히어로/.test(key)) return "Cut 1 / Hero";
+  return `Hama cut / ${fallbackRole}`;
 }
 
 function buildCodexRoleInstruction(role: PdpSectionVisualRole) {
@@ -3409,7 +3501,7 @@ function buildProductFidelityInstructions(section: SectionBlueprint) {
     /(칼|필러|껍질|슬라이서|커터|도구|주방|peeler|slicer|knife|blade|cutter|kitchen)/i.test(haystack);
   const categoryLock = isKitchenOrBladeTool
     ? "For kitchen tools or blade tools, preserve the exact blade count, blade direction, handle shape, hole/screw placement, metal cutouts, serration/teeth pattern, proportions, and grip orientation from image 1. Do not turn it into a different peeler, knife, slicer, or hybrid tool."
-    : "Preserve the exact silhouette, proportions, component layout, material, color, packaging structure, labels/logos, and all visible product-specific details from image 1.";
+    : "Preserve the exact silhouette, proportions, component layout, material feel, color, option/component count, packaging structure, labels/logos, patterns, holes, slots, teeth, rivets, seams, blades, handles, hinges, openings, buttons, ports, brackets, lids, straps, clips, and every visible functional part from image 1.";
 
   return [
     "PRODUCT FIDELITY LOCK: image 1 is the source-of-truth product reference, not a loose style inspiration.",
